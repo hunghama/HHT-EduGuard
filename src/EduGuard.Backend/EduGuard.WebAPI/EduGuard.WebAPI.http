@@ -1,0 +1,19 @@
+@EduGuard.WebAPI_HostAddress = http://localhost:5160
+
+### 1. Test ngủ gật dưới 180s (Chưa kích hoạt cảnh báo)
+POST {{EduGuard.WebAPI_HostAddress}}/api/alerts/sleep
+Content-Type: application/json
+
+{
+  "seatCode": "A1-01",
+  "durationSeconds": 60
+}
+
+### 2. Test ngủ gật trên 180s (Kích hoạt cảnh báo Telegram)
+POST {{EduGuard.WebAPI_HostAddress}}/api/alerts/sleep
+Content-Type: application/json
+
+{
+  "seatCode": "A1-02",
+  "durationSeconds": 240
+}
