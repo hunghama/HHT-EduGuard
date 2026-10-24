@@ -265,7 +265,7 @@ public class CheckInRequest
 
     public long TelegramChatId { get; set; } = 100003;
 
-    public bool IsLivenessVerified { get; set; } = true;
+    public bool IsLivenessVerified { get; set; } = false;
 
 }
 
