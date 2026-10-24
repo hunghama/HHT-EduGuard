@@ -1,79 +1,250 @@
+﻿
+using EduGuard.Core.Enums;
+
+
+
 namespace EduGuard.Core.Entities;
 
-/// <summary>
-/// ====================================================================================
-/// KIẾN TRÚC CLEAN ARCHITECTURE - TẦNG CORE (DOMAIN ENTITY)
-/// ------------------------------------------------------------------------------------
-/// KHÁI NIỆM: "ĐỐI TƯỢNG CÓ NÃO" (RICH DOMAIN MODEL)
-/// 
-/// 1. Tính đóng gói (Encapsulation): 
-///    Mọi thuộc tính đều có `private set`. Thế giới bên ngoài không được phép tự ý thay đổi
-///    trạng thái của sinh viên (như gán `student.IsSleeping = true` một cách tùy tiện).
-/// 
-/// 2. Nghiệp vụ tập trung (Core Business Rules):
-///    Entity không phải là túi chứa dữ liệu rỗng (Anemic Domain Model) mà tự nó quản lý
-///    quy tắc nghiệp vụ của chính mình. Hành vi `RecordSleepDuration(int seconds)` là logic
-///    nghiệp vụ: chỉ khi ngủ gật liên tục từ 180 giây (3 phút) trở lên thì mới xác nhận
-///    trạng thái ngủ gật và kích hoạt cờ cảnh báo.
-/// ====================================================================================
-/// </summary>
+
+
 public class Student
+
 {
-    public Guid Id { get; private set; }
+
+    public int Id { get; private set; }
+
     public string StudentCode { get; private set; }
+
     public string FullName { get; private set; }
+
+    public string ClassName { get; private set; }
+
     public string CurrentSeat { get; private set; }
+
     public long TelegramChatId { get; private set; }
-    public bool IsSleeping { get; private set; }
 
-    // Constructor đảm bảo tính hợp lệ khi khởi tạo đối tượng (Invariants)
-    public Student(Guid id, string studentCode, string fullName, string currentSeat, long telegramChatId)
+    public EngagementStatus Status { get; private set; }
+
+    public int ContinuousDurationSeconds { get; private set; }
+
+    public DateTime? CheckedInAt { get; private set; }
+
+    public DateTime? LastAlertSentAt { get; private set; }
+
+    public int TotalSleepAlertsCount { get; private set; }
+
+
+
+    public Student(
+
+        int id,
+
+        string studentCode,
+
+        string fullName,
+
+        string className,
+
+        string defaultSeat,
+
+        long telegramChatId)
+
     {
-        if (string.IsNullOrWhiteSpace(studentCode))
-            throw new ArgumentException("Mã sinh viên không được để trống.", nameof(studentCode));
-
-        if (string.IsNullOrWhiteSpace(fullName))
-            throw new ArgumentException("Họ tên sinh viên không được để trống.", nameof(fullName));
 
         Id = id;
+
         StudentCode = studentCode;
+
         FullName = fullName;
-        CurrentSeat = currentSeat ?? string.Empty;
+
+        ClassName = className;
+
+        CurrentSeat = defaultSeat;
+
         TelegramChatId = telegramChatId;
-        IsSleeping = false;
+
+        Status = EngagementStatus.Focused;
+
+        ContinuousDurationSeconds = 0;
+
+        CheckedInAt = DateTime.UtcNow;
+
     }
 
-    /// <summary>
-    /// Hàm nghiệp vụ cốt lõi: Ghi nhận thời lượng cúi gục/ngủ gật (tính bằng giây).
-    /// </summary>
-    /// <param name="seconds">Số giây hệ thống AI ghi nhận trạng thái ngủ gật.</param>
-    /// <returns>True nếu vượt ngưỡng cảnh báo (>= 180s), ngược lại False.</returns>
-    public bool RecordSleepDuration(int seconds)
+
+
+    public bool CheckIn(
+
+        string seatCode,
+
+        long telegramChatId,
+
+        bool isLivenessVerified)
+
     {
-        if (seconds < 0)
+
+        if (!isLivenessVerified) return false;
+
+        CurrentSeat = seatCode;
+
+        TelegramChatId = telegramChatId;
+
+        Status = EngagementStatus.Focused;
+
+        ContinuousDurationSeconds = 0;
+
+        CheckedInAt = DateTime.UtcNow;
+
+        return true;
+
+    }
+
+
+
+    public void SetBreakTime(bool isBreak)
+
+    {
+
+        Status = isBreak
+
+            ? EngagementStatus.Relaxing
+
+            : EngagementStatus.Focused;
+
+        ContinuousDurationSeconds = 0;
+
+    }
+
+
+
+    public bool UpdatePoseState(
+
+        string poseType,
+
+        int durationSeconds,
+
+        bool isBreakTime)
+
+    {
+
+        if (isBreakTime)
+
         {
-            throw new ArgumentOutOfRangeException(nameof(seconds), "Thời gian ngủ không thể là số âm.");
+
+            Status = EngagementStatus.Relaxing;
+
+            ContinuousDurationSeconds = 0;
+
+            return false;
+
         }
 
-        // Quy tắc nghiệp vụ cốt lõi: Ngủ liên tục từ 180s (3 phút) trở lên mới kích hoạt báo thức
-        const int SleepAlertThresholdSeconds = 180;
 
-        if (seconds >= SleepAlertThresholdSeconds)
+
+        ContinuousDurationSeconds = durationSeconds;
+
+        var p = (poseType ?? "focused").Trim().ToLowerInvariant();
+
+
+
+        if (p == "focused" || p == "normal")
+
         {
-            IsSleeping = true;
-            return true;
+
+            Status = EngagementStatus.Focused;
+
+            return false;
+
         }
 
-        // Nếu dưới ngưỡng thì chưa kết luận ngủ gật kéo dài
-        IsSleeping = false;
+
+
+        if (p == "distracted")
+
+        {
+
+            Status = durationSeconds >= 30
+
+                ? EngagementStatus.Distracted
+
+                : EngagementStatus.Focused;
+
+            return false;
+
+        }
+
+
+
+        if (p == "sleeping" || p == "sleep")
+
+        {
+
+            if (durationSeconds >= 180)
+
+            {
+
+                Status = EngagementStatus.Sleeping;
+
+                if (GetCooldownRemainingSeconds() == 0)
+
+                {
+
+                    LastAlertSentAt = DateTime.UtcNow;
+
+                    TotalSleepAlertsCount++;
+
+                    return true;
+
+                }
+
+            }
+
+            else
+
+            {
+
+                Status = EngagementStatus.Distracted;
+
+            }
+
+        }
+
         return false;
+
     }
 
-    /// <summary>
-    /// Đánh thức sinh viên và reset trạng thái về tỉnh táo
-    /// </summary>
-    public void WakeUp()
+
+
+    public int GetCooldownRemainingSeconds()
+
     {
-        IsSleeping = false;
+
+        if (LastAlertSentAt == null) return 0;
+
+        var diff = DateTime.UtcNow - LastAlertSentAt.Value;
+
+        var sec = (int)diff.TotalSeconds;
+
+        return sec >= 300 ? 0 : (300 - sec);
+
     }
+
+
+
+    public string GetColorHex() => Status switch
+
+    {
+
+        EngagementStatus.Focused => "#198754",
+
+        EngagementStatus.Distracted => "#ffc107",
+
+        EngagementStatus.Sleeping => "#dc3545",
+
+        EngagementStatus.Relaxing => "#0dcaf0",
+
+        _ => "#6c757d"
+
+    };
+
 }
