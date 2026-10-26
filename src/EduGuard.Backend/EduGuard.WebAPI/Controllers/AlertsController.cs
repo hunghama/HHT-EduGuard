@@ -1,142 +1,73 @@
-﻿
-using EduGuard.Core.Enums;
-
 using EduGuard.Core.Interfaces;
-
 using Microsoft.AspNetCore.Mvc;
-
 
 
 namespace EduGuard.WebAPI.Controllers;
 
 
-
 [ApiController]
-
 [Route("api/alerts")]
-
 public class AlertsController : ControllerBase
-
 {
-
-    private readonly IStudentRepository _repo;
-
-    private readonly ITelegramAlertService _tg;
+    private readonly IStudentRepository _studentRepo;
+    private readonly ITelegramAlertService _telegramService;
 
 
-
-    public AlertsController(
-
-        IStudentRepository repo,
-
-        ITelegramAlertService tg)
-
+    public AlertsController(IStudentRepository studentRepo, ITelegramAlertService telegramService)
     {
-
-        _repo = repo;
-
-        _tg = tg;
-
+        _studentRepo = studentRepo;
+        _telegramService = telegramService;
     }
-
 
 
     [HttpPost("pose")]
-
     [HttpPost("sleep")]
-
-    public async Task<IActionResult> ProcessPose([FromBody] PoseAlertRequest req)
-
+    public async Task<IActionResult> ProcessPoseAlert([FromBody] PoseAlertRequest request)
     {
-
-        var st = _repo.GetBySeatCode(req.SeatCode);
-
-        if (st == null)
-
+        var student = _studentRepo.GetBySeatCode(request.SeatCode);
+        if (student == null)
         {
-
-            return NotFound(new
-
-            {
-
-                success = false,
-
-                message = "Không tìm thấy ghế " + req.SeatCode
-
-            });
-
+            return NotFound(new { success = false, message = $"Không tìm thấy sinh viên tại ghế {request.SeatCode}" });
         }
 
 
-
-        var pose = string.IsNullOrWhiteSpace(req.PoseType) ? "sleeping" : req.PoseType;
-
-        bool trig = st.UpdatePoseState(pose, req.DurationSeconds, _repo.IsBreakTime);
-
+        string effectivePose = string.IsNullOrWhiteSpace(request.PoseType) ? "sleeping" : request.PoseType;
+        bool triggered = student.UpdatePoseState(effectivePose, request.DurationSeconds, _studentRepo.IsBreakTime);
+        _studentRepo.SaveChanges();
 
 
-        if (trig)
-
+        if (triggered)
         {
-
-            await _tg.SendWakeUpMessageAsync(st.TelegramChatId, st.FullName, st.CurrentSeat);
-
+            await _telegramService.SendWakeUpMessageAsync(student.TelegramChatId, student.FullName, student.CurrentSeat);
         }
 
 
-
-        int cd = st.GetCooldownRemainingSeconds();
-
-        string msg = _repo.IsBreakTime
-
-            ? "Đang giờ giải lao, tạm dừng cảnh báo."
-
-            : trig
-
-                ? "Đã gửi tin nhắn khích lệ Telegram!"
-
-                : (cd > 0 && st.Status == EngagementStatus.Sleeping)
-
-                    ? $"Đang khóa Cooldown ({cd}s)."
-
-                    : "Đã cập nhật trạng thái ghế.";
-
+        string msg = _studentRepo.IsBreakTime
+            ? "Đang trong giờ giải lao. Tạm dừng cảnh báo tự động."
+            : triggered
+                ? "Phát hiện gục đầu vượt 180s. Đã gửi tin nhắn khích lệ riêng qua Telegram!"
+                : student.GetCooldownRemainingSeconds() > 0 && student.Status == EduGuard.Core.Enums.EngagementStatus.Sleeping
+                    ? $"Đang trong thời gian khóa Cooldown chống spam (còn {student.GetCooldownRemainingSeconds()}s)."
+                    : $"Đã cập nhật trạng thái ghế {student.CurrentSeat}: {student.Status.ToString().ToLower()}";
 
 
         return Ok(new
-
         {
-
             success = true,
-
-            triggeredAlert = trig,
-
-            seatCode = st.CurrentSeat,
-
-            studentName = st.FullName,
-
-            currentStatus = st.Status.ToString().ToLower(),
-
-            cooldownRemainingSeconds = cd,
-
+            triggeredAlert = triggered,
+            seatCode = student.CurrentSeat,
+            studentName = student.FullName,
+            currentStatus = student.Status.ToString().ToLower(),
+            cooldownRemainingSeconds = student.GetCooldownRemainingSeconds(),
             message = msg
-
         });
-
     }
-
 }
 
 
-
 public class PoseAlertRequest
-
 {
-
     public string SeatCode { get; set; } = "A2-01";
-
     public string PoseType { get; set; } = "sleeping";
-
     public int DurationSeconds { get; set; }
-
 }
