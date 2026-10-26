@@ -32,20 +32,29 @@ public class AlertsController : ControllerBase
 
 
         string effectivePose = string.IsNullOrWhiteSpace(request.PoseType) ? "sleeping" : request.PoseType;
-        bool triggered = student.UpdatePoseState(effectivePose, request.DurationSeconds, _studentRepo.IsBreakTime);
-        _studentRepo.SaveChanges();
+        bool shouldTrigger = student.UpdatePoseState(effectivePose, request.DurationSeconds, _studentRepo.IsBreakTime);
+        bool delivered = false;
 
 
-        if (triggered)
+        if (shouldTrigger)
         {
-            await _telegramService.SendWakeUpMessageAsync(student.TelegramChatId, student.FullName, student.CurrentSeat);
+            delivered = await _telegramService.SendWakeUpMessageAsync(student.TelegramChatId, student.FullName, student.CurrentSeat);
+            if (delivered)
+            {
+                student.RecordConfirmedAlertDelivery();
+            }
         }
+
+
+        _studentRepo.SaveChanges();
 
 
         string msg = _studentRepo.IsBreakTime
             ? "Đang trong giờ giải lao. Tạm dừng cảnh báo tự động."
-            : triggered
-                ? "Phát hiện gục đầu vượt 180s. Đã gửi tin nhắn khích lệ riêng qua Telegram!"
+            : shouldTrigger
+                ? (delivered
+                    ? "Phát hiện gục đầu vượt 180s. Đã gửi tin nhắn khích lệ riêng qua Telegram!"
+                    : "Phát hiện gục đầu vượt 180s. Đã ghi nhận cảnh báo tại hệ thống (chế độ Local Log).")
                 : student.GetCooldownRemainingSeconds() > 0 && student.Status == EduGuard.Core.Enums.EngagementStatus.Sleeping
                     ? $"Đang trong thời gian khóa Cooldown chống spam (còn {student.GetCooldownRemainingSeconds()}s)."
                     : $"Đã cập nhật trạng thái ghế {student.CurrentSeat}: {student.Status.ToString().ToLower()}";
@@ -54,7 +63,8 @@ public class AlertsController : ControllerBase
         return Ok(new
         {
             success = true,
-            triggeredAlert = triggered,
+            triggeredAlert = shouldTrigger,
+            telegramDelivered = delivered,
             seatCode = student.CurrentSeat,
             studentName = student.FullName,
             currentStatus = student.Status.ToString().ToLower(),

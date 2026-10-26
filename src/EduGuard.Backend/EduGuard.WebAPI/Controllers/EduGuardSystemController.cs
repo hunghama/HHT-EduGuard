@@ -122,7 +122,7 @@ public class EduGuardSystemController : ControllerBase
     public IActionResult GetAnalytics()
     {
         var students = _studentRepo.GetAll();
-        int totalAlerts = students.Sum(s => s.TotalSleepAlertsCount);
+        int totalDeliveredAlerts = students.Sum(s => s.TotalSleepAlertsCount);
 
 
         return Ok(new
@@ -145,8 +145,8 @@ public class EduGuardSystemController : ControllerBase
                 final30MinAverageCei = 51.0,
                 endingCeiPercentage = 48.0,
                 dropAmplitudePercentage = 42.0,
-                totalTelegramAlertsSent = totalAlerts,
-                statisticalNote = $"Số liệu thống kê khung giờ 90–120 phút: Chỉ số tập trung CEI trung bình đạt 51.0% (chạm đáy 48.0% ở phút 105–120, biên độ giảm 42.0% so với đầu ca học; tổng số tin nhắn nhắc nhở riêng đã gửi: {totalAlerts} lượt)."
+                totalTelegramAlertsSent = totalDeliveredAlerts,
+                statisticalNote = $"Số liệu thống kê khung giờ 90–120 phút: Chỉ số tập trung CEI trung bình đạt 51.0% (chạm đáy 48.0% ở phút 105–120, biên độ giảm 42.0% so với đầu ca học; tổng số tin nhắn nhắc nhở riêng đã gửi thành công: {totalDeliveredAlerts} lượt)."
             }
         });
     }
@@ -158,7 +158,8 @@ public class CheckInRequest
     public string StudentCode { get; set; } = "SV003";
     public string SeatCode { get; set; } = "A2-01";
     public long TelegramChatId { get; set; } = 100003;
-    public bool IsLivenessVerified { get; set; } = true;
+    // Mặc định Fail-Closed (false) theo kiểm toán bảo mật của Codex: Bắt buộc phía Client phải gửi rõ true
+    public bool IsLivenessVerified { get; set; } = false;
     public string? MatchedFaceAngle { get; set; } = "TOP_DOWN_PITCH_25_YAW_0";
     public double? BaselinePitchRatio { get; set; } = 0.48;
 }
