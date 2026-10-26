@@ -113,7 +113,6 @@ public class Student
                 if (LastAlertSentAt == null || (DateTime.UtcNow - LastAlertSentAt.Value).TotalSeconds >= 300)
                 {
                     LastAlertSentAt = DateTime.UtcNow;
-                    TotalSleepAlertsCount++;
                     return true;
                 }
             }
@@ -125,6 +124,12 @@ public class Student
 
 
         return false;
+    }
+
+
+    public void RecordConfirmedAlertDelivery()
+    {
+        TotalSleepAlertsCount++;
     }
 
 
