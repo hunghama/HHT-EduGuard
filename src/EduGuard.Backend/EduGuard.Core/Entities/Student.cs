@@ -127,6 +127,11 @@ public class Student
     }
 
 
+    public void RecordCooldownOnly()
+    {
+        LastAlertSentAt = DateTime.UtcNow;
+    }
+
     public void RecordConfirmedAlertDelivery()
     {
         TotalSleepAlertsCount++;

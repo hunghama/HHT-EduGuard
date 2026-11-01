@@ -95,10 +95,12 @@ public class AlertsController : ControllerBase
             });
         }
 
-        bool delivered = await _telegramService.SendWakeUpMessageAsync(
-            student.TelegramChatId,
-            student.FullName,
-            student.CurrentSeat);
+        bool delivered = await _telegramService.SendWakeUpMessageAsync(student.TelegramChatId, student.FullName, student.CurrentSeat);
+        if (delivered)
+        {
+            student.RecordCooldownOnly();
+            _studentRepo.SaveChanges();
+        }
 
         return Ok(new
         {
