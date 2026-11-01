@@ -1,9 +1,7 @@
 using EduGuard.Core.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
-
 namespace EduGuard.WebAPI.Controllers;
-
 
 [ApiController]
 [Route("api/alerts")]
@@ -12,13 +10,11 @@ public class AlertsController : ControllerBase
     private readonly IStudentRepository _studentRepo;
     private readonly ITelegramAlertService _telegramService;
 
-
     public AlertsController(IStudentRepository studentRepo, ITelegramAlertService telegramService)
     {
         _studentRepo = studentRepo;
         _telegramService = telegramService;
     }
-
 
     [HttpPost("pose")]
     [HttpPost("sleep")]
@@ -30,11 +26,9 @@ public class AlertsController : ControllerBase
             return NotFound(new { success = false, message = $"Không tìm thấy sinh viên tại ghế {request.SeatCode}" });
         }
 
-
         string effectivePose = string.IsNullOrWhiteSpace(request.PoseType) ? "sleeping" : request.PoseType;
         bool shouldTrigger = student.UpdatePoseState(effectivePose, request.DurationSeconds, _studentRepo.IsBreakTime);
         bool delivered = false;
-
 
         if (shouldTrigger)
         {
@@ -45,9 +39,7 @@ public class AlertsController : ControllerBase
             }
         }
 
-
         _studentRepo.SaveChanges();
-
 
         string msg = _studentRepo.IsBreakTime
             ? "Đang trong giờ giải lao. Tạm dừng cảnh báo tự động."
@@ -58,7 +50,6 @@ public class AlertsController : ControllerBase
                 : student.GetCooldownRemainingSeconds() > 0 && student.Status == EduGuard.Core.Enums.EngagementStatus.Sleeping
                     ? $"Đang trong thời gian khóa Cooldown chống spam (còn {student.GetCooldownRemainingSeconds()}s)."
                     : $"Đã cập nhật trạng thái ghế {student.CurrentSeat}: {student.Status.ToString().ToLower()}";
-
 
         return Ok(new
         {
@@ -72,12 +63,46 @@ public class AlertsController : ControllerBase
             message = msg
         });
     }
-}
 
+    [HttpPost("test-telegram")]
+    public async Task<IActionResult> TestLiveTelegram([FromBody] TestTelegramRequest request)
+    {
+        var student = _studentRepo.GetBySeatCode(request.SeatCode);
+        string fullName = student != null ? student.FullName : "Sái Công Phi Hùng";
+        long targetChatId = request.CustomChatId > 0
+            ? request.CustomChatId
+            : (student != null ? student.TelegramChatId : 100001);
+
+        bool delivered = await _telegramService.SendWakeUpMessageAsync(targetChatId, fullName, request.SeatCode);
+        if (delivered && student != null)
+        {
+            student.RecordConfirmedAlertDelivery();
+            _studentRepo.SaveChanges();
+        }
+
+        return Ok(new
+        {
+            success = delivered,
+            telegramDelivered = delivered,
+            seatCode = request.SeatCode,
+            studentName = fullName,
+            targetChatId = targetChatId,
+            message = delivered
+                ? $"ĐÃ BẮN TIN NHẮN TELEGRAM THẬT TỚI ĐIỆN THOẠI ({fullName} - Ghế {request.SeatCode}) THÀNH CÔNG!"
+                : "Chưa gửi được tin nhắn thật. Hãy kiểm tra biến môi trường TELEGRAM_BOT_TOKEN và đảm bảo đã bấm START trên Bot Telegram."
+        });
+    }
+}
 
 public class PoseAlertRequest
 {
     public string SeatCode { get; set; } = "A2-01";
     public string PoseType { get; set; } = "sleeping";
-    public int DurationSeconds { get; set; }
+    public int DurationSeconds { get; set; } = 185;
+}
+
+public class TestTelegramRequest
+{
+    public string SeatCode { get; set; } = "A1-01";
+    public long CustomChatId { get; set; } = 0;
 }
