@@ -14,7 +14,7 @@ KẾT NỐI BACKEND C# (.NET 10): SÁI CÔNG PHI HÙNG (TECH LEAD)
    - Chế độ 2 (Phím [T]): CAMERA GÓC CAO 2.2m TRÊN TRẦN (DroidCam / Camera IP RTSP) ->
      Nhận tín hiệu ghế đã khóa từ QR/Mobile 2FA, BỎ QUA quét mặt trên cao, vào thẳng
      bám 33 mốc khung xương đỉnh đầu - vai bất biến tỷ lệ!
-2. Tương thích mọi bản Python (3.9 -> 3.14) & MediaPipe (`mp.tasks` + `mp.solutions`).
+2. Tương thích mọi bản Python (3.9 -> 3.14) & MediaPipe (mp.tasks + mp.solutions).
 3. Tự động dò tìm Camera đa cổng (0..3) và tự động bật Mô phỏng 33 Khớp xương nếu PC
    chưa cắm Webcam.
 ====================================================================================
@@ -52,7 +52,6 @@ STUDENT_NAME_DISPLAY = "Bui Thi Huong Quynh (SV003)"
 BACKEND_BASE_URL = "http://localhost:5160"
 
 # CẤU HÌNH NGUỒN CAMERA & DROIDCAM TRÊN ĐIỆN THOẠI:
-# Nếu dùng DroidCam qua Wi-Fi IP, điền URL vào đây (ví dụ: "http://192.168.1.25:4747/video")
 DROIDCAM_IP_URL = ""
 
 # Ngưỡng thời gian chuẩn sư phạm (tính bằng giây)
@@ -201,7 +200,7 @@ def compute_face_feature_vector(frame: np.ndarray, face_bbox: tuple) -> np.ndarr
     gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
     gray = cv2.equalizeHist(gray)
 
-    # Chia khuôn mặt thành 4 vùng không gian (Mắt trái, Mắt phải, Mũi, Miệng) để lấy đặc trưng cấu trúc
+    # Chia khuôn mặt thành 4 vùng không gian (Mắt trái, Mắt phải, Mũi, Miệng)
     blocks = [
         gray[0:32, 0:32],
         gray[0:32, 32:64],
@@ -246,8 +245,8 @@ class SimpleLandmark:
 class UniversalPoseAndFaceEngine:
     """
     Tự động tương thích với:
-    - MediaPipe >= 0.10.31 (Python 3.13 / 3.14): Dùng `mediapipe.tasks.python.vision.PoseLandmarker`
-    - MediaPipe <= 0.10.21 (Python 3.10 - 3.12): Dùng `mp.solutions.pose`
+    - MediaPipe >= 0.10.31 (Python 3.13 / 3.14): Dùng mediapipe.tasks.python.vision.PoseLandmarker
+    - MediaPipe <= 0.10.21 (Python 3.10 - 3.12): Dùng mp.solutions.pose
     - Dự phòng OpenCV Haar Cascade: Đảm bảo 100% không bao giờ lỗi trên mọi máy tính.
     """
     def __init__(self):
@@ -692,7 +691,7 @@ def draw_checkin_phase_hud(
     cv2.putText(frame, f"Buoc 1 [OK]: QR Telegram ({DEFAULT_CHAT_ID}) | Mau mat: {reg_status} | {angle_status_str}",
                 (16, 54), cv2.FONT_HERSHEY_SIMPLEX, 0.41, (235, 235, 235), 1, cv2.LINE_AA)
 
-    cv2.putText(frame, f"Mẹo: Neu dung Camera Goc Cao 2.2m (khong quet mat), bam phim [T] de vao thang che do Bam Khung Xuong!",
+    cv2.putText(frame, f"Meo: Neu dung Camera Goc Cao 2.2m (khong quet mat), bam phim [T] de vao thang che do Bam Khung Xuong!",
                 (16, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.41, (120, 255, 160), 1, cv2.LINE_AA)
 
     if register_flash_msg:
