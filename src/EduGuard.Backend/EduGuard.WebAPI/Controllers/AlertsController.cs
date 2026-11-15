@@ -1,5 +1,7 @@
 using EduGuard.Core.Interfaces;
+using EduGuard.WebAPI.Hubs;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 
 namespace EduGuard.WebAPI.Controllers;
 
@@ -10,15 +12,18 @@ public class AlertsController : ControllerBase
     private readonly IStudentRepository _studentRepo;
     private readonly ITelegramAlertService _telegramService;
     private readonly IWebHostEnvironment _env;
+    private readonly IHubContext<EduGuardHub> _hubContext;
 
     public AlertsController(
         IStudentRepository studentRepo,
         ITelegramAlertService telegramService,
-        IWebHostEnvironment env)
+        IWebHostEnvironment env,
+        IHubContext<EduGuardHub> hubContext)
     {
         _studentRepo = studentRepo;
         _telegramService = telegramService;
         _env = env;
+        _hubContext = hubContext;
     }
 
     [HttpPost("pose")]
@@ -45,6 +50,17 @@ public class AlertsController : ControllerBase
         }
 
         _studentRepo.SaveChanges();
+
+        await _hubContext.Clients.All.SendAsync("ReceiveClassroomUpdate", new
+        {
+            eventType = "POSE_UPDATE",
+            seatCode = student.CurrentSeat,
+            studentCode = student.StudentCode,
+            currentStatus = student.Status.ToString().ToLower(),
+            triggeredAlert = shouldTrigger,
+            telegramDelivered = delivered,
+            timestamp = DateTime.UtcNow
+        });
 
         string msg = _studentRepo.IsBreakTime
             ? "Đang trong giờ giải lao. Tạm dừng cảnh báo tự động."
