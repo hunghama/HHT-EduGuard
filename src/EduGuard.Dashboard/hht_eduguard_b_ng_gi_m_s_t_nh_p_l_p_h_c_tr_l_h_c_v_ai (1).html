@@ -1023,7 +1023,34 @@
 
       fetchClassroomStateAndAnalytics();
       if (pollingTimerId) clearInterval(pollingTimerId);
-      pollingTimerId = setInterval(fetchClassroomStateAndAnalytics, 2500);
+      
+        pollingTimerId = setInterval(fetchClassroomStateAndAnalytics, 2500);
+
+        // N?ng c?p Real-Time WebSocket qua ASP.NET Core SignalR (< 50ms), gi? Polling 2.5s l?m d? ph?ng
+        async function initSignalRRealtime() {
+            if (typeof signalR === "undefined") {
+                appendEventLog("SYSTEM", "Không tải được SignalR CDN, giữ chế độ HTTP Polling 2.5s.", "text-amber-400");
+                return;
+            }
+            const hubUrl = `${backendBaseUrl.replace(/\/+$/, "")}/hubs/eduguard?classCode=UDPM2`;
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl(hubUrl)
+                .withAutomaticReconnect([0, 2000, 5000, 10000])
+                .build();
+
+            connection.on("ReceiveClassroomUpdate", (payload) => {
+                console.log("[SignalR Push <50ms]", payload);
+                fetchClassroomStateAndAnalytics();
+            });
+
+            try {
+                await connection.start();
+                appendEventLog("SIGNALR", "Đã kết nối WebSocket Real-Time (<50ms) tới /hubs/eduguard!", "text-emerald-400");
+            } catch (err) {
+                console.warn("[SignalR] Fallback sang Polling 2.5s:", err);
+            }
+        }
+        initSignalRRealtime();
 
       // Wire buttons
       document.getElementById("btnApplyBackendUrl").addEventListener("click", () => {
@@ -1066,5 +1093,6 @@
       });
     });
   </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
 </body>
 </html>

@@ -1,6 +1,8 @@
 using EduGuard.Core.Enums;
 using EduGuard.Core.Interfaces;
+using EduGuard.WebAPI.Hubs;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 
 
 namespace EduGuard.WebAPI.Controllers;
@@ -11,16 +13,18 @@ namespace EduGuard.WebAPI.Controllers;
 public class EduGuardSystemController : ControllerBase
 {
     private readonly IStudentRepository _studentRepo;
+    private readonly IHubContext<EduGuardHub> _hubContext;
 
 
-    public EduGuardSystemController(IStudentRepository studentRepo)
+    public EduGuardSystemController(IStudentRepository studentRepo, IHubContext<EduGuardHub> hubContext)
     {
         _studentRepo = studentRepo;
+        _hubContext = hubContext;
     }
 
 
     [HttpPost("attendance/check-in")]
-    public IActionResult CheckIn([FromBody] CheckInRequest request)
+    public async Task<IActionResult> CheckIn([FromBody] CheckInRequest request)
     {
         var student = _studentRepo.GetByStudentCode(request.StudentCode);
         if (student == null)
@@ -46,6 +50,14 @@ public class EduGuardSystemController : ControllerBase
 
 
         _studentRepo.SaveChanges();
+
+        await _hubContext.Clients.All.SendAsync("ReceiveClassroomUpdate", new
+        {
+            eventType = "CHECKIN_2FA",
+            seatCode = student.CurrentSeat,
+            studentCode = student.StudentCode,
+            timestamp = DateTime.UtcNow
+        });
 
 
         return Ok(new
@@ -104,9 +116,15 @@ public class EduGuardSystemController : ControllerBase
 
 
     [HttpPost("classroom/break-time")]
-    public IActionResult ToggleBreakTime([FromBody] BreakTimeRequest request)
+    public async Task<IActionResult> ToggleBreakTime([FromBody] BreakTimeRequest request)
     {
         _studentRepo.SetBreakTime(request.IsBreak);
+        await _hubContext.Clients.All.SendAsync("ReceiveClassroomUpdate", new
+        {
+            eventType = "BREAK_TIME",
+            isBreakTime = _studentRepo.IsBreakTime,
+            timestamp = DateTime.UtcNow
+        });
         return Ok(new
         {
             success = true,
