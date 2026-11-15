@@ -2,29 +2,29 @@
 ====================================================================================
 DỰ ÁN: HHT-EDUGUARD (SÁNG TẠO TRẺ HÀ NỘI 2026)
 ĐƠN VỊ: KHOA CNTT - TRƯỜNG CAO ĐẲNG CÔNG NGHỆ CAO HÀ NỘI (HHT)
-MODULE: CAMERA AI ĐA LUỒNG 5 GHẾ & BẢO MẬT VECTOR SHA-256 (V2.7 ENTERPRISE)
+MODULE: CAMERA AI ĐA LUỒNG 5 GHẾ & BẢO MẬT VECTOR SHA-256 (V2.8 CODEX-AUDITED)
 PHỤ TRÁCH: SÁI CÔNG PHI HÙNG (TECH LEAD) & BÙI THỊ HƯƠNG QUỲNH (AI ENGINEER)
 ====================================================================================
-ĐẶC ĐIỂM KỸ THUẬT CHUẨN XÁC CỦA BẢN V2.7 ENTERPRISE:
-1. Đa người 5 Ghế & Ghép Cặp Không Gian Ổn Định (Hungarian Nearest-Centroid Matching):
-   - Bắt đồng thời tối đa 5 sinh viên trong khung hình (`num_poses=5`: `SV001`..`SV005`).
-   - Sử dụng thuật toán đối sánh tâm vai gần nhất (`anchor_x, anchor_y`) kết hợp bộ lọc
-     5-Frame Debounce, giúp khi 1 bạn đi ra ngoài hoặc cúi gục sâu thì các bạn ngồi cạnh
-     KHÔNG BAO GIỜ bị nhảy nhầm mã ghế hay reset bộ đếm thời gian!
-2. Băm Bảo Mật Khuôn Mặt (Salted SHA-256 Digest + Zero-PII Vector):
-   - Khi bấm phím [R] đăng ký mẫu mặt, hệ thống lưu kèm chữ ký băm mật mã `SHA-256`
-     (`face_template_SV001.json`) để chứng minh tuân thủ Nghị định 13/2023/NĐ-CP.
-3. Chống Ngược Chữ Camera Sau (Phím [L] - Mirror Toggle) & Lọc Nhiễu Gõ Phím:
-   - Bấm [L] để đảo chiều lật gương tức thì khi dùng camera sau điện thoại DroidCam.
-   - Bấm [1..5] hoặc [S] để chọn ghế đang kiểm thử trực tiếp.
+ĐẶC ĐIỂM KỸ THUẬT CHUẨN XÁC CỦA BẢN V2.8 (ĐÃ VÁ 2 LỖ HỔNG [P1] & [P2] CỦA CODEX):
+1. Vá lỗi [P1] của Codex (Không bao giờ tự ý Check-in 2FA hộ cả lớp khi bấm [T]):
+   - Khi chuyển sang Chế độ Camera Góc Cao 2.2m (`[T]`), hệ thống CHỈ chuyển tầng hiển thị
+     sang giám sát khung xương cho những ghế đã thực sự hoàn tất xác thực 2FA (hoặc kiểm tra
+     trạng thái ghế từ Backend C#), tuyệt đối KHÔNG gửi `isLivenessVerified=True` hàng loạt!
+2. Vá lỗi [P2] của Codex (Ánh xạ Khung xương theo Vùng Tọa Độ Ghế Cố Định - Fixed Seat ROI):
+   - Mỗi ghế (`A1-01`..`A3-01`) có một vùng tọa độ ngang cố định (`roi_x_min` -> `roi_x_max`)
+     và tâm ghế chuẩn (`seat_center_x`). Khi một ghế trống hoặc sinh viên rời khỏi ghế > 3.5s,
+     người ngồi ở ghế bên phải sẽ chỉ khớp vào đúng vùng ROI của ghế bên phải (hoặc giữ ở
+     trạng thái `UNASSIGNED` nếu nằm ngoài vùng ghế đã check-in), tuyệt đối KHÔNG bị gán nhầm
+     vào slot trống đầu tiên (`SV001 / A1-01`)!
+3. Băm Bảo Mật Khuôn Mặt (`Salted SHA-256`) + 5-Frame Debounce + Phím `[L]` Chống Ngược Chữ.
 ====================================================================================
 BẢNG PHÍM TẮT ĐIỀU KHIỂN THỰC CHIẾN:
 - Phím [L] : Bật/Tắt LẬT GƯƠNG (Chống ngược chữ khi dùng Camera sau DroidCam)
 - Phím [R] : ĐĂNG KÝ MẪU MẶT CHÍNH CHỦ TẠI CHỖ (Kèm băm bảo mật SHA-256)
 - Phím [T] : Chuyển đổi [Tầng 1: Cự Ly Gần 2FA] <-> [Tầng 2: Góc Cao 2.2m Đa Người]
 - Phím [S] : Chuyển đổi Ghế đang chọn để kiểm thử (`A1-01` -> `A3-01`)
-- Phím [C] : Kích hoạt lại ĐIỂM DANH 2FA (3 giây)
-- Phím [B] : Hiệu chuẩn nhanh Mốc Ngồi Thẳng (Baseline Pitch) cho mọi người trong hình
+- Phím [C] : Kích hoạt lại ĐIỂM DANH 2FA (3 giây) cho ghế đang chọn
+- Phím [B] : Hiệu chuẩn nhanh Mốc Ngồi Thẳng (Baseline Pitch)
 - Phím [F] : Giả lập đưa ẢNH IN A4 vào camera (Test chặn gian lận Liveness = False)
 - Phím [V] : Quét & Chuyển đổi nhanh nguồn Camera (Webcam 0/1/2 <-> DroidCam <-> Mô phỏng)
 - Phím [M] : Bật/Tắt chế độ TUA NHANH DEMO (x30 tốc độ: Gục đầu 6s = 180s thực tế)
@@ -47,18 +47,34 @@ import mediapipe as mp
 import requests
 
 # ==================================================================================
-# 1. CẤU HÌNH HỆ THỐNG & DANH SÁCH ĐẦY ĐỦ 5 THÀNH VIÊN NHÓM HHT-EDUGUARD
+# 1. CẤU HÌNH HỆ THỐNG & VÙNG TỌA ĐỘ GHẾ CỐ ĐỊNH (FIXED SEAT ROI ZONES)
 # ==================================================================================
 BACKEND_BASE_URL = "http://localhost:5160"
 DROIDCAM_IP_URL = ""  # Điền "http://<IP_DIEN_THOAI>:4747/video" nếu bắt luồng IP trực tiếp
 CRYPTO_SALT = "HHT_EDUGUARD_ND13_2026_SALT"
 
+# Mỗi ghế có vùng tọa độ ngang cố định (roi_min_x, roi_max_x, seat_center_x) trên khung hình
 SEAT_ROSTER = [
-    {"seat": "A1-01", "code": "SV001", "name": "Sai Cong Phi Hung", "short": "Hung", "chat_id": 6599740123},
-    {"seat": "A1-02", "code": "SV002", "name": "Luu Thi Kim Lien", "short": "Lien", "chat_id": 100002},
-    {"seat": "A2-01", "code": "SV003", "name": "Bui Thi Huong Quynh", "short": "Quynh", "chat_id": 100003},
-    {"seat": "A2-02", "code": "SV004", "name": "Nguyen Quang Huy", "short": "Huy", "chat_id": 100004},
-    {"seat": "A3-01", "code": "SV005", "name": "Le Van An", "short": "An", "chat_id": 100005},
+    {
+        "seat": "A1-01", "code": "SV001", "name": "Sai Cong Phi Hung", "short": "Hung",
+        "chat_id": 6599740123, "center_x": 0.14, "roi_min_x": 0.00, "roi_max_x": 0.24
+    },
+    {
+        "seat": "A1-02", "code": "SV002", "name": "Luu Thi Kim Lien", "short": "Lien",
+        "chat_id": 100002, "center_x": 0.32, "roi_min_x": 0.24, "roi_max_x": 0.41
+    },
+    {
+        "seat": "A2-01", "code": "SV003", "name": "Bui Thi Huong Quynh", "short": "Quynh",
+        "chat_id": 100003, "center_x": 0.50, "roi_min_x": 0.41, "roi_max_x": 0.59
+    },
+    {
+        "seat": "A2-02", "code": "SV004", "name": "Nguyen Quang Huy", "short": "Huy",
+        "chat_id": 100004, "center_x": 0.68, "roi_min_x": 0.59, "roi_max_x": 0.77
+    },
+    {
+        "seat": "A3-01", "code": "SV005", "name": "Le Van An", "short": "An",
+        "chat_id": 100005, "center_x": 0.86, "roi_min_x": 0.77, "roi_max_x": 1.00
+    },
 ]
 MAX_MULTI_POSES = 5
 
@@ -93,7 +109,7 @@ _THROTTLE_SECONDS = 1.0
 
 
 # ==================================================================================
-# 2. ĐỒNG BỘ BẤT ĐỒNG BỘ SANG BACKEND C# (ĐỘC LẬP TỪNG GHẾ TRONG 5 GHẾ)
+# 2. ĐỒNG BỘ BẤT ĐỒNG BỘ SANG BACKEND C# (ĐỘC LẬP TỪNG GHẾ ĐÃ XÁC THỰC)
 # ==================================================================================
 def sync_pose_to_backend(seat_code: str, pose_type: str, duration_seconds: int):
     now = time.time()
@@ -172,6 +188,32 @@ def send_checkin_2fa_to_backend(
                 _api_status_text = "TU CHOI DIEM DANH 2FA (LIVENESS/FACE FAILED - OFFLINE)"
 
     threading.Thread(target=_checkin_worker, daemon=True).start()
+
+
+def sync_verified_seats_from_backend(slot_states: list):
+    """
+    Khi chuyển sang chế độ Góc Cao [T], truy vấn danh sách các ghế đã check-in hợp lệ
+    từ Backend C# (GET /api/dashboard/classroom-state) thay vì tự ý gửi check-in giả!
+    """
+    def _fetch_worker():
+        global _api_status_text
+        url = f"{BACKEND_BASE_URL}/api/dashboard/classroom-state"
+        try:
+            res = requests.get(url, timeout=1.2)
+            if res.status_code == 200:
+                data = res.json()
+                seats_data = data.get("seats", [])
+                verified_codes = {s.get("seatCode") for s in seats_data if s.get("seatCode")}
+                count = 0
+                for idx, s_info in enumerate(SEAT_ROSTER):
+                    if s_info["seat"] in verified_codes:
+                        slot_states[idx]["verified"] = True
+                        count += 1
+                _api_status_text = f"OVERHEAD 2.2M | DA DONG BO {count} GHE DA CHECK-IN TU BACKEND C#"
+        except Exception:
+            _api_status_text = "OVERHEAD 2.2M | CHE DO GIAM SAT VUNG GHE ROI CO DINH"
+
+    threading.Thread(target=_fetch_worker, daemon=True).start()
 
 
 # ==================================================================================
@@ -273,7 +315,6 @@ class UniversalPoseAndFaceEngine:
         self.tasks_landmarker = None
         self.face_cascade = None
 
-        # Ưu tiên khởi tạo MediaPipe Tasks API trước vì hỗ trợ num_poses=5 người đồng thời!
         if hasattr(mp, "tasks"):
             try:
                 from mediapipe.tasks import python as mp_tasks
@@ -371,17 +412,23 @@ class UniversalPoseAndFaceEngine:
 
 
 # ==================================================================================
-# 5. GHÉP CẶP KHÔNG GIAN ĐA NGƯỜI (NEAREST-CENTROID TRACKING CHỐNG NHẢY GHẾ)
+# 5. ĐỐI SÁNH VÙNG GHẾ CỐ ĐỊNH (FIXED SEAT ROI MATCHING - VÁ LỖI [P2] CỦA CODEX)
 # ==================================================================================
-def assign_poses_to_seat_slots(valid_poses: list, slot_states: list, now: float) -> list:
+def assign_poses_to_seat_slots(valid_poses: list, slot_states: list, now: float) -> tuple[list, list]:
     """
-    Ánh xạ từng bộ khung xương phát hiện được vào đúng ghế cố định dựa trên khoảng cách
-    Euclid của tâm hai vai (cx, cy) so với vị trí neo (anchor_x, anchor_y) của ghế đó ở
-    frame trước. Nếu là lần đầu xuất hiện, sắp xếp tự nhiên từ trái sang phải.
+    Vá triệt để cảnh báo [P2] của Codex:
+    - KHÔNG BAO GIỜ gán một người chưa khớp vào "slot trống đầu tiên (SV001 / A1-01)".
+    - Bước 1: Ưu tiên ghép vào ghế đang active có tâm vai neo (anchor_x, anchor_y) gần nhất
+      với điều kiện người đó vẫn nằm trong biên độ hợp lệ của vùng ghế đó.
+    - Bước 2: Đối với các phát hiện mới (hoặc sau khi vắng mặt > 3.5s), bắt buộc đối chiếu
+      tọa độ ngang `cx` với vùng ghế cố định (`roi_min_x <= cx <= roi_max_x`) trong `SEAT_ROSTER`.
+    - Bước 3: Nếu vùng ghế đó đã có người hoặc phát hiện nằm ngoài vùng ghế hợp lệ, trả về
+      danh sách `unassigned_poses` (chỉ vẽ khung xám `UNASSIGNED`, không gửi nhầm cảnh báo!).
     """
-    assignments = []
+    assigned = []
+    unassigned = []
     if not valid_poses:
-        return assignments
+        return assigned, unassigned
 
     poses_with_center = []
     for lms in valid_poses[:MAX_MULTI_POSES]:
@@ -389,7 +436,6 @@ def assign_poses_to_seat_slots(valid_poses: list, slot_states: list, now: float)
         cy = (lms[11].y + lms[12].y) / 2.0
         poses_with_center.append((cx, cy, lms))
 
-    # Sắp xếp từ trái sang phải theo trục X
     poses_with_center.sort(key=lambda item: item[0])
 
     active_slots = [
@@ -398,42 +444,59 @@ def assign_poses_to_seat_slots(valid_poses: list, slot_states: list, now: float)
     ]
 
     used_slots = set()
-    unassigned_poses = []
+    remaining_poses = []
 
-    # Bước 1: Ưu tiên ghép vào ghế đang theo dõi có tọa độ tâm vai gần nhất (< 0.22)
+    # Bước 1: Đối sánh với các ghế đang theo dõi liên tục (Nearest Active Centroid within Seat Zone)
     for cx, cy, lms in poses_with_center:
         best_slot = None
-        best_dist = 0.22
+        best_dist = 0.16
         for s_idx in active_slots:
             if s_idx in used_slots:
                 continue
+            s_info = SEAT_ROSTER[s_idx]
+            # Đảm bảo tâm vai không trôi ra ngoài vùng ghế cố định quá 0.08
+            if not (s_info["roi_min_x"] - 0.08 <= cx <= s_info["roi_max_x"] + 0.08):
+                continue
             st = slot_states[s_idx]
-            dist = math.hypot(cx - st["anchor_x"], (cy - st["anchor_y"]) * 0.6)
+            dist = math.hypot(cx - st["anchor_x"], (cy - st["anchor_y"]) * 0.5)
             if dist < best_dist:
                 best_dist = dist
                 best_slot = s_idx
+
         if best_slot is not None:
             used_slots.add(best_slot)
             st = slot_states[best_slot]
             st["anchor_x"] = 0.80 * st["anchor_x"] + 0.20 * cx
             st["anchor_y"] = 0.80 * st["anchor_y"] + 0.20 * cy
-            assignments.append((best_slot, lms))
+            assigned.append((best_slot, lms))
         else:
-            unassigned_poses.append((cx, cy, lms))
+            remaining_poses.append((cx, cy, lms))
 
-    # Bước 2: Gán các bộ khung xương mới vào các slot ghế còn trống theo thứ tự trái -> phải
-    for cx, cy, lms in unassigned_poses:
-        for s_idx in range(MAX_MULTI_POSES):
-            if s_idx not in used_slots:
-                used_slots.add(s_idx)
-                st = slot_states[s_idx]
-                st["anchor_x"] = cx
-                st["anchor_y"] = cy
-                assignments.append((s_idx, lms))
-                break
+    # Bước 2: Ánh xạ các phát hiện mới vào ĐÚNG VÙNG TỌA ĐỘ GHẾ CỐ ĐỊNH (Fixed Seat ROI)
+    for cx, cy, lms in remaining_poses:
+        matched_fixed_slot = None
+        best_roi_dist = 0.20
+        for s_idx, s_info in enumerate(SEAT_ROSTER):
+            if s_idx in used_slots:
+                continue
+            if s_info["roi_min_x"] <= cx <= s_info["roi_max_x"]:
+                dist_to_seat_center = abs(cx - s_info["center_x"])
+                if dist_to_seat_center < best_roi_dist:
+                    best_roi_dist = dist_to_seat_center
+                    matched_fixed_slot = s_idx
 
-    assignments.sort(key=lambda item: item[0])
-    return assignments
+        if matched_fixed_slot is not None:
+            used_slots.add(matched_fixed_slot)
+            st = slot_states[matched_fixed_slot]
+            st["anchor_x"] = cx
+            st["anchor_y"] = cy
+            assigned.append((matched_fixed_slot, lms))
+        else:
+            # Không thuộc vùng ghế trống nào -> giữ ở trạng thái Unassigned, không gán bừa vào SV001
+            unassigned.append(lms)
+
+    assigned.sort(key=lambda item: item[0])
+    return assigned, unassigned
 
 
 def build_synthetic_33_landmarks(cx: float, nose_y: float, sw: float, shoulder_y: float, roll_offset: float = 0.0, hands_together: bool = False) -> list:
@@ -475,7 +538,7 @@ def build_synthetic_33_landmarks(cx: float, nose_y: float, sw: float, shoulder_y
     return lms
 
 
-def generate_virtual_classroom_frame(sim_pose_mode: str, multi_mode: bool = False) -> tuple:
+def generate_virtual_classroom_frame(sim_pose_mode: str, multi_mode: bool = False, active_seat_idx: int = 0) -> tuple:
     h, w = 720, 1280
     frame = np.full((h, w, 3), (32, 26, 20), dtype=np.uint8)
 
@@ -484,11 +547,12 @@ def generate_virtual_classroom_frame(sim_pose_mode: str, multi_mode: bool = Fals
     for gy in range(90, h - 70, 80):
         cv2.line(frame, (0, gy), (w, gy), (45, 38, 30), 1)
 
-    cv2.rectangle(frame, (120, 520), (1160, 645), (55, 45, 38), -1)
-    cv2.rectangle(frame, (120, 520), (1160, 645), (90, 75, 60), 2)
+    cv2.rectangle(frame, (80, 520), (1200, 645), (55, 45, 38), -1)
+    cv2.rectangle(frame, (80, 520), (1200, 645), (90, 75, 60), 2)
 
     if not multi_mode:
-        cx, sw, shoulder_y = 0.50, 0.25, 0.56
+        cx = SEAT_ROSTER[active_seat_idx]["center_x"]
+        sw, shoulder_y = 0.22, 0.56
         if sim_pose_mode == "distracted":
             nose_y = shoulder_y - sw * 0.30
             lms = build_synthetic_33_landmarks(cx, nose_y, sw, shoulder_y, roll_offset=0.01, hands_together=True)
@@ -500,12 +564,11 @@ def generate_virtual_classroom_frame(sim_pose_mode: str, multi_mode: bool = Fals
             lms = build_synthetic_33_landmarks(cx, nose_y, sw, shoulder_y, roll_offset=0.0, hands_together=False)
         poses = [lms]
     else:
-        # Ở chế độ Góc Cao [T] khi mô phỏng: Tạo 3 sinh viên ngồi cạnh nhau trên dãy bàn
-        centers = [0.24, 0.50, 0.76]
         poses = []
-        for idx, cx in enumerate(centers):
-            sw, shoulder_y = 0.18, 0.56
-            if idx == 0:
+        for idx, s_info in enumerate(SEAT_ROSTER[:3]):
+            cx = s_info["center_x"]
+            sw, shoulder_y = 0.15, 0.56
+            if idx == active_seat_idx:
                 factor = 0.13 if sim_pose_mode == "sleeping" else (0.29 if sim_pose_mode == "distracted" else 0.48)
                 hands = (sim_pose_mode == "distracted")
             else:
@@ -514,10 +577,10 @@ def generate_virtual_classroom_frame(sim_pose_mode: str, multi_mode: bool = Fals
 
     cv2.putText(
         frame,
-        "[MO PHONG KHUNG XUONG 33 MOC] Bam [1/2/3] Doi tu the | [T] Che do Goc Cao Da Nguoi | [V] Quet Camera That",
-        (140, 505),
+        "[MO PHONG KHUNG XUONG 33 MOC] Bam [1/2/3] Doi tu the | [S] Doi Ghe | [T] Goc Cao Da Nguoi | [V] Quet Cam",
+        (135, 505),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.48,
+        0.47,
         (0, 230, 255),
         1,
         cv2.LINE_AA
@@ -664,7 +727,6 @@ def analyze_posture(landmarks, smoothed_state: dict, baseline_pitch_ratio: float
         is_holding_phone = wrists_visible and (wrist_ratio < 0.60) and (pitch_retention < 0.78)
         instant_pose = "distracted" if (is_head_tilted_down or is_holding_phone) else "focused"
 
-    # Bộ lọc 5-Frame Debounce: Chống nhảy trạng thái khi sinh viên cúi đầu gõ phím tích tắc
     history = smoothed_state.setdefault("pose_window", [])
     history.append(instant_pose)
     if len(history) > DEBOUNCE_FRAMES_REQUIRED:
@@ -684,8 +746,27 @@ def analyze_posture(landmarks, smoothed_state: dict, baseline_pitch_ratio: float
 
 
 # ==================================================================================
-# 7. GIAO DIỆN HUD ĐA NGƯỜI TRỰC QUAN
+# 7. GIAO DIỆN HUD ĐA NGƯỜI & HIỂN THỊ VÙNG GHẾ ROI
 # ==================================================================================
+def draw_seat_roi_zones(frame):
+    """Vẽ ranh giới vùng ghế cố định (Fixed Seat ROI) nhẹ nhàng dưới đáy khung hình."""
+    h, w, _ = frame.shape
+    for s_info in SEAT_ROSTER:
+        x_left = int(s_info["roi_min_x"] * w)
+        x_right = int(s_info["roi_max_x"] * w)
+        cv2.line(frame, (x_left, h - 92), (x_left, h - 70), (70, 85, 100), 1)
+        cv2.putText(
+            frame,
+            f"ROI {s_info['seat']}",
+            (x_left + 8, h - 76),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.35,
+            (130, 150, 175),
+            1,
+            cv2.LINE_AA
+        )
+
+
 def draw_eduguard_hud(
     frame,
     active_slot_info: dict,
@@ -725,12 +806,12 @@ def draw_eduguard_hud(
 
     cv2.rectangle(frame, (0, 89), (w, 92), theme_color, -1)
 
-    tier_badge = f"[TANG 2: GOC CAO 2.2m - QUET {MAX_MULTI_POSES} GHE]" if overhead_2_2m_mode else "[TANG 2: DA KHOA 2FA -> BAM 33 MOC XUONG]"
+    tier_badge = "[TANG 2: GOC CAO 2.2m - FIXED SEAT ROI]" if overhead_2_2m_mode else "[TANG 2: DA KHOA 2FA -> BAM 33 MOC XUONG]"
     seat_str = f"[{active_slot_info['seat']}] {active_slot_info['name']} ({active_slot_info['code']})"
     cv2.putText(
         frame,
-        f"HHT-EDUGUARD V2.7 | GHE: {seat_str} {tier_badge}",
-        (16, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.50, (255, 255, 255), 2, cv2.LINE_AA
+        f"HHT-EDUGUARD V2.8 | GHE: {seat_str} {tier_badge}",
+        (16, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.49, (255, 255, 255), 2, cv2.LINE_AA
     )
 
     mode_str = "DEMO x30 (6s=180s)" if demo_fast_mode else "REALTIME 1x"
@@ -746,7 +827,7 @@ def draw_eduguard_hud(
 
     cv2.putText(
         frame,
-        f"Chi so [{active_slot_info['seat']}]: Pitch={metrics.get('pitch_ratio', 0):.2f} ({metrics.get('retention_pct', 100)}% so voi Baseline={metrics.get('baseline', 0.48):.2f}) | Roll={metrics.get('roll_ratio', 0):.2f} | 5-Frame Debounce: ON",
+        f"Chi so [{active_slot_info['seat']}]: Pitch={metrics.get('pitch_ratio', 0):.2f} ({metrics.get('retention_pct', 100)}% so voi Baseline={metrics.get('baseline', 0.48):.2f}) | Roll={metrics.get('roll_ratio', 0):.2f} | Fixed-ROI: ON",
         (16, 77), cv2.FONT_HERSHEY_SIMPLEX, 0.41, (160, 160, 160), 1, cv2.LINE_AA
     )
 
@@ -811,11 +892,11 @@ def draw_checkin_phase_hud(
         (16, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (0, 230, 255), 2, cv2.LINE_AA
     )
 
-    reg_status = f"SHA256:{sha256_short} (Khop: {int(face_similarity*100)}%)" if has_registered_face else "Chua luu mau (Bam [R] de băm SHA-256 tai cho)"
+    reg_status = f"SHA256:{sha256_short} (Khop: {int(face_similarity*100)}%)" if has_registered_face else "Chua luu mau (Bam [R] de bam SHA-256 tai cho)"
     cv2.putText(frame, f"QR Telegram ({active_slot_info['chat_id']}) | Mau mat: {reg_status} | {angle_status_str}",
                 (16, 54), cv2.FONT_HERSHEY_SIMPLEX, 0.41, (235, 235, 235), 1, cv2.LINE_AA)
 
-    cv2.putText(frame, "Meo: Neu dung Camera Goc Cao 2.2m quet ca day ban, bam phim [T] de vao thang che do Bam Khung Xuong 5 Nguoi!",
+    cv2.putText(frame, "Meo: Bam [S] chon ghe can Check-in 2FA, hoac bam [T] de chuyen sang man hinh Giam sat Goc Cao 2.2m!",
                 (16, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.41, (120, 255, 160), 1, cv2.LINE_AA)
 
     if register_flash_msg:
@@ -852,7 +933,7 @@ def draw_checkin_phase_hud(
 
 
 # ==================================================================================
-# 8. TỰ ĐỘNG DÒ TÌM CAMERA & VÒNG LẶP CHÍNH V2.7 ENTERPRISE
+# 8. TỰ ĐỘNG DÒ TÌM CAMERA & VÒNG LẶP CHÍNH V2.8 CODEX-AUDITED
 # ==================================================================================
 def auto_detect_camera(start_idx: int = 0):
     if DROIDCAM_IP_URL.strip():
@@ -900,7 +981,7 @@ def load_registered_template_for_student(student_code: str) -> tuple:
 
 def main():
     print("=======================================================================")
-    print(" KHOI DONG CAMERA AI V2.7 ENTERPRISE - HHT EDUGUARD (5-SEAT MULTI-POSE)")
+    print(" KHOI DONG CAMERA AI V2.8 - HHT EDUGUARD (CODEX AUDITED FIXED-ROI 2FA)")
     print("=======================================================================")
     print(f"-> Dang ket noi Camera va dong bo ve Backend C#: {BACKEND_BASE_URL}")
 
@@ -930,6 +1011,7 @@ def main():
 
     slot_states = [
         {
+            "verified": False,
             "smoothed": {},
             "anchor_x": None,
             "anchor_y": None,
@@ -964,10 +1046,10 @@ def main():
                 else:
                     cap.release()
                     cap = None
-                    frame, all_poses = generate_virtual_classroom_frame(virtual_pose_mode, overhead_2_2m_mode)
+                    frame, all_poses = generate_virtual_classroom_frame(virtual_pose_mode, overhead_2_2m_mode, active_seat_idx)
                     last_clean_frame = frame.copy()
             else:
-                frame, all_poses = generate_virtual_classroom_frame(virtual_pose_mode, overhead_2_2m_mode)
+                frame, all_poses = generate_virtual_classroom_frame(virtual_pose_mode, overhead_2_2m_mode, active_seat_idx)
                 last_clean_frame = frame.copy()
                 time.sleep(0.025)
 
@@ -1027,6 +1109,7 @@ def main():
                             )
                             checkin_start_time = now
                         else:
+                            # Chỉ gửi check-in cho ĐÚNG cá nhân vừa vượt qua xác thực 2FA thực tế!
                             send_checkin_2fa_to_backend(
                                 active_slot_info["code"],
                                 active_slot_info["seat"],
@@ -1035,11 +1118,13 @@ def main():
                                 matched_angle_code,
                                 calibrated_baseline_pitch
                             )
+                            slot_states[active_seat_idx]["verified"] = True
                             slot_states[active_seat_idx]["smoothed"]["personal_baseline"] = calibrated_baseline_pitch
+                            slot_states[active_seat_idx]["anchor_x"] = (primary_landmarks[11].x + primary_landmarks[12].x) / 2.0
+                            slot_states[active_seat_idx]["anchor_y"] = (primary_landmarks[11].y + primary_landmarks[12].y) / 2.0
                             is_checked_in = True
-                            for st in slot_states:
-                                st["abnormal_start"] = None
-                                st["last_seen"] = now
+                            slot_states[active_seat_idx]["abnormal_start"] = None
+                            slot_states[active_seat_idx]["last_seen"] = now
                 else:
                     checkin_start_time = None
                     progress_ratio = 0.0
@@ -1063,14 +1148,18 @@ def main():
                 cv2.imshow("EduGuard - Camera AI (MediaPipe Pose 33 Landmarks)", frame)
 
             # ==================================================================
-            # TẦNG 2: BÁM 33 MỐC KHUNG XƯƠNG ĐA NGƯỜI (5 GHẾ + NEAREST CENTROID)
+            # TẦNG 2: BÁM 33 MỐC KHUNG XƯƠNG THEO VÙNG GHẾ CỐ ĐỊNH (FIXED SEAT ROI)
             # ==================================================================
             else:
+                if overhead_2_2m_mode:
+                    draw_seat_roi_zones(frame)
+
                 valid_poses = [lms for lms in all_poses if len(lms) >= 33]
                 if len(valid_poses) == 1 and not overhead_2_2m_mode:
                     assignments = [(active_seat_idx, valid_poses[0])]
+                    unassigned_poses = []
                 else:
-                    assignments = assign_poses_to_seat_slots(valid_poses, slot_states, now)
+                    assignments, unassigned_poses = assign_poses_to_seat_slots(valid_poses, slot_states, now)
 
                 primary_pose_status = slot_states[active_seat_idx]["api_pose"]
                 primary_duration_sec = slot_states[active_seat_idx]["duration_sec"]
@@ -1120,7 +1209,9 @@ def main():
                         elif manual_override == "sleeping":
                             st["duration_sec"] = max(st["duration_sec"], 195)
 
-                    sync_pose_to_backend(seat_code, st["api_pose"], st["duration_sec"])
+                    # Chỉ đồng bộ trạng thái & kích hoạt cảnh báo cho những ghế đã được xác thực (hoặc ghế đang active)
+                    if st["verified"] or s_idx == active_seat_idx:
+                        sync_pose_to_backend(seat_code, st["api_pose"], st["duration_sec"])
 
                     xs = [lm.x * w for lm in lms[:17] if lm.visibility > 0.3]
                     ys = [lm.y * h for lm in lms[:17] if lm.visibility > 0.3]
@@ -1131,14 +1222,27 @@ def main():
                             (7, 193, 255) if st["api_pose"] == "distracted" else (69, 53, 220)
                         )
                         cv2.rectangle(frame, (x1, y1), (x2, y2), box_col, 2)
-                        person_tag = f"[{slot_info['seat']} {slot_info['short']}] {st['api_pose'].upper()} ({st['duration_sec']}s)"
+                        ver_badge = "2FA" if (st["verified"] or s_idx == active_seat_idx) else "ROI"
+                        person_tag = f"[{slot_info['seat']} {slot_info['short']} - {ver_badge}] {st['api_pose'].upper()} ({st['duration_sec']}s)"
                         cv2.putText(frame, person_tag, (x1, max(112, y1 - 8)),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, box_col, 2, cv2.LINE_AA)
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.44, box_col, 2, cv2.LINE_AA)
 
                     if s_idx == active_seat_idx or len(assignments) == 1:
                         primary_pose_status = st["api_pose"]
                         primary_duration_sec = st["duration_sec"]
                         primary_metrics = metrics
+
+                # Vẽ khung xám cho các phát hiện nằm ngoài vùng ghế hoặc chưa định danh (Unassigned)
+                for u_lms in unassigned_poses:
+                    draw_pose_skeleton_cv2(frame, u_lms)
+                    xs = [lm.x * w for lm in u_lms[:17] if lm.visibility > 0.3]
+                    ys = [lm.y * h for lm in u_lms[:17] if lm.visibility > 0.3]
+                    if xs and ys:
+                        x1, y1 = max(10, int(min(xs) - 30)), max(95, int(min(ys) - 40))
+                        x2, y2 = min(w - 10, int(max(xs) + 30)), min(h - 75, int(max(ys) + 30))
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), (140, 140, 140), 1)
+                        cv2.putText(frame, "[UNASSIGNED SEAT ROI]", (x1, max(112, y1 - 8)),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.42, (180, 180, 180), 1, cv2.LINE_AA)
 
                 # Giữ trạng thái cho ghế đang chọn nếu sinh viên gục đầu quá sâu khuất khỏi ống kính
                 if active_seat_idx not in seen_slot_indices:
@@ -1198,23 +1302,18 @@ def main():
                         checkin_start_time = time.time()
                         print(f"[FACE-2FA] Da luu vector & SHA256 ({sha256_short}) cho {active_slot_info['code']}!")
             elif key in [ord('t'), ord('T')]:
+                # Vá lỗi [P1] của Codex: Khi chuyển sang Góc Cao 2.2m, tuyệt đối KHÔNG tự động
+                # gửi check-in isLivenessVerified=True hộ cả lớp, mà chỉ đồng bộ danh sách ghế
+                # đã thực sự check-in từ Backend C#!
                 overhead_2_2m_mode = not overhead_2_2m_mode
                 if overhead_2_2m_mode:
                     is_checked_in = True
-                    for s_info in SEAT_ROSTER:
-                        send_checkin_2fa_to_backend(
-                            s_info["code"],
-                            s_info["seat"],
-                            s_info["chat_id"],
-                            True,
-                            "MOBILE_QR_2FA_LOCKED_OVERHEAD_2.2M",
-                            calibrated_baseline_pitch
-                        )
-                    print("[TIER-2 OVERHEAD] Da chuyen sang Che do Camera Goc Cao 2.2m (Da nguoi 5 ghe)!")
+                    sync_verified_seats_from_backend(slot_states)
+                    print("[TIER-2 OVERHEAD] Da chuyen sang Che do Camera Goc Cao 2.2m (Fixed Seat ROI)!")
                 else:
-                    is_checked_in = False
+                    is_checked_in = slot_states[active_seat_idx]["verified"]
                     checkin_start_time = None
-                    print("[TIER-1 CLOSE-UP] Da chuyen ve Che do Camera Cu Ly Gan (Quet 2FA 3 giay)!")
+                    print("[TIER-1 CLOSE-UP] Da chuyen ve Che do Camera Cu Ly Gan!")
             elif key in [ord('v'), ord('V')]:
                 if cap is not None:
                     cap.release()
