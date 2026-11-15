@@ -1029,7 +1029,7 @@
         // N?ng c?p Real-Time WebSocket qua ASP.NET Core SignalR (< 50ms), gi? Polling 2.5s l?m d? ph?ng
         async function initSignalRRealtime() {
             if (typeof signalR === "undefined") {
-                appendEventLog("SYSTEM", "Kh?ng t?i ???c SignalR CDN, gi? ch? ?? HTTP Polling 2.5s.", "text-amber-400");
+                appendEventLog("SYSTEM", "Không tải được SignalR CDN, giữ chế độ HTTP Polling 2.5s.", "text-amber-400");
                 return;
             }
             const hubUrl = `${backendBaseUrl.replace(/\/+$/, "")}/hubs/eduguard?classCode=UDPM2`;
@@ -1045,7 +1045,7 @@
 
             try {
                 await connection.start();
-                appendEventLog("SIGNALR", "?? k?t n?i WebSocket Real-Time (<50ms) t?i /hubs/eduguard!", "text-emerald-400");
+                appendEventLog("SIGNALR", "Đã kết nối WebSocket Real-Time (<50ms) tới /hubs/eduguard!", "text-emerald-400");
             } catch (err) {
                 console.warn("[SignalR] Fallback sang Polling 2.5s:", err);
             }
