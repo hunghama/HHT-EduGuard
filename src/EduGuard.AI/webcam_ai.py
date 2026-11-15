@@ -192,8 +192,9 @@ def send_checkin_2fa_to_backend(
 
 def sync_verified_seats_from_backend(slot_states: list):
     """
-    Khi chuyển sang chế độ Góc Cao [T], truy vấn danh sách các ghế đã check-in hợp lệ
-    từ Backend C# (GET /api/dashboard/classroom-state) thay vì tự ý gửi check-in giả!
+    Khi chuyển sang chế độ Góc Cao [T], chỉ đồng bộ những ghế có cờ xác thực 2FA tường minh
+    (isLivenessVerified == True hoặc isCheckedIn == True) từ Backend C#, giữ nguyên trạng thái
+    xác thực cục bộ đã thực hiện, tuyệt đối không đánh dấu toàn bộ danh sách khởi tạo (GetAll).
     """
     def _fetch_worker():
         global _api_status_text
@@ -203,15 +204,19 @@ def sync_verified_seats_from_backend(slot_states: list):
             if res.status_code == 200:
                 data = res.json()
                 seats_data = data.get("seats", [])
-                verified_codes = {s.get("seatCode") for s in seats_data if s.get("seatCode")}
-                count = 0
+                verified_codes = {
+                    s.get("seatCode")
+                    for s in seats_data
+                    if s.get("seatCode") and (s.get("isLivenessVerified") is True or s.get("isCheckedIn") is True)
+                }
                 for idx, s_info in enumerate(SEAT_ROSTER):
                     if s_info["seat"] in verified_codes:
                         slot_states[idx]["verified"] = True
-                        count += 1
-                _api_status_text = f"OVERHEAD 2.2M | DA DONG BO {count} GHE DA CHECK-IN TU BACKEND C#"
+                count = sum(1 for st in slot_states if st["verified"])
+                _api_status_text = f"OVERHEAD 2.2M | DANG GIAM SAT {count} GHE DA XAC THUC 2FA"
         except Exception:
-            _api_status_text = "OVERHEAD 2.2M | CHE DO GIAM SAT VUNG GHE ROI CO DINH"
+            count = sum(1 for st in slot_states if st["verified"])
+            _api_status_text = f"OVERHEAD 2.2M | GIAM SAT {count} GHE DA XAC THUC 2FA (LOCAL)"
 
     threading.Thread(target=_fetch_worker, daemon=True).start()
 
@@ -1059,7 +1064,7 @@ def main():
             # ==================================================================
             # TẦNG 1: ĐIỂM DANH 2FA CỰ LY GẦN (3 GIÂY) + BĂM MẬT MÃ SHA-256
             # ==================================================================
-            if not is_checked_in:
+            if not is_checked_in and not overhead_2_2m_mode:
                 draw_pose_skeleton_cv2(frame, primary_landmarks)
                 face_bbox, angle_status_str, detected_code = extract_face_bbox_and_angles_from_pose(primary_landmarks, w, h)
                 last_face_bbox = face_bbox
@@ -1209,8 +1214,8 @@ def main():
                         elif manual_override == "sleeping":
                             st["duration_sec"] = max(st["duration_sec"], 195)
 
-                    # Chỉ đồng bộ trạng thái & kích hoạt cảnh báo cho những ghế đã được xác thực (hoặc ghế đang active)
-                    if st["verified"] or s_idx == active_seat_idx:
+                    # Chỉ đồng bộ trạng thái & kích hoạt cảnh báo cho những ghế ĐÃ XÁC THỰC 2FA
+                    if st["verified"]:
                         sync_pose_to_backend(seat_code, st["api_pose"], st["duration_sec"])
 
                     xs = [lm.x * w for lm in lms[:17] if lm.visibility > 0.3]
@@ -1222,7 +1227,7 @@ def main():
                             (7, 193, 255) if st["api_pose"] == "distracted" else (69, 53, 220)
                         )
                         cv2.rectangle(frame, (x1, y1), (x2, y2), box_col, 2)
-                        ver_badge = "2FA" if (st["verified"] or s_idx == active_seat_idx) else "ROI"
+                        ver_badge = "2FA" if st["verified"] else "UNVERIFIED-ROI"
                         person_tag = f"[{slot_info['seat']} {slot_info['short']} - {ver_badge}] {st['api_pose'].upper()} ({st['duration_sec']}s)"
                         cv2.putText(frame, person_tag, (x1, max(112, y1 - 8)),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.44, box_col, 2, cv2.LINE_AA)
@@ -1244,21 +1249,37 @@ def main():
                         cv2.putText(frame, "[UNASSIGNED SEAT ROI]", (x1, max(112, y1 - 8)),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.42, (180, 180, 180), 1, cv2.LINE_AA)
 
-                # Giữ trạng thái cho ghế đang chọn nếu sinh viên gục đầu quá sâu khuất khỏi ống kính
-                if active_seat_idx not in seen_slot_indices:
-                    st_active = slot_states[active_seat_idx]
-                    if st_active["abnormal_start"] is not None and (now - st_active["last_seen"] <= OCCLUSION_GRACE_SEC):
-                        real_elapsed = now - st_active["abnormal_start"]
+                # Xử lý toàn bộ các ghế bị khuất hoặc biến mất khỏi khung hình (Vá lỗi [P2] của Codex)
+                for s_idx, slot_info in enumerate(SEAT_ROSTER):
+                    if s_idx in seen_slot_indices:
+                        continue
+                    st_missing = slot_states[s_idx]
+                    seat_code_missing = slot_info["seat"]
+
+                    if st_missing["abnormal_start"] is not None and (now - st_missing["last_seen"] <= OCCLUSION_GRACE_SEC):
+                        # Trong thời gian ân hạn 3.5s khi sinh viên gục đầu sâu khuất khỏi ống kính
+                        real_elapsed = now - st_missing["abnormal_start"]
                         multiplier = 30.0 if demo_fast_mode else 1.0
-                        st_active["duration_sec"] = int(real_elapsed * multiplier)
-                        st_active["api_pose"] = "sleeping" if st_active["duration_sec"] >= THRESHOLD_SLEEPING_SEC else "distracted"
-                        primary_pose_status = st_active["api_pose"]
-                        primary_duration_sec = st_active["duration_sec"]
-                        sync_pose_to_backend(active_slot_info["seat"], primary_pose_status, primary_duration_sec)
-                    elif manual_override is not None:
-                        primary_pose_status = manual_override
-                        primary_duration_sec = 195 if manual_override == "sleeping" else (65 if manual_override == "distracted" else 0)
-                        sync_pose_to_backend(active_slot_info["seat"], primary_pose_status, primary_duration_sec)
+                        st_missing["duration_sec"] = int(real_elapsed * multiplier)
+                        st_missing["api_pose"] = "sleeping" if st_missing["duration_sec"] >= THRESHOLD_SLEEPING_SEC else "distracted"
+                        if st_missing["verified"]:
+                            sync_pose_to_backend(seat_code_missing, st_missing["api_pose"], st_missing["duration_sec"])
+                    elif s_idx == active_seat_idx and manual_override is not None and st_missing["verified"]:
+                        st_missing["api_pose"] = manual_override
+                        st_missing["duration_sec"] = 195 if manual_override == "sleeping" else (65 if manual_override == "distracted" else 0)
+                        sync_pose_to_backend(seat_code_missing, st_missing["api_pose"], st_missing["duration_sec"])
+                    elif st_missing["last_seen"] > 0 and (now - st_missing["last_seen"] > OCCLUSION_GRACE_SEC):
+                        # Quá thời gian ân hạn 3.5s: xóa trạng thái bất thường cũ để Dashboard không bị treo
+                        st_missing["abnormal_start"] = None
+                        st_missing["duration_sec"] = 0
+                        if st_missing["api_pose"] != "focused":
+                            st_missing["api_pose"] = "focused"
+                            if st_missing["verified"]:
+                                sync_pose_to_backend(seat_code_missing, "focused", 0)
+
+                    if s_idx == active_seat_idx:
+                        primary_pose_status = st_missing["api_pose"]
+                        primary_duration_sec = st_missing["duration_sec"]
 
                 draw_eduguard_hud(
                     frame,
@@ -1285,8 +1306,12 @@ def main():
             elif key in [ord('s'), ord('S')]:
                 active_seat_idx = (active_seat_idx + 1) % len(SEAT_ROSTER)
                 active_slot_info = SEAT_ROSTER[active_seat_idx]
+                is_checked_in = slot_states[active_seat_idx]["verified"]
+                checkin_start_time = None
+                nose_history.clear()
+                pitch_calibration_samples.clear()
                 registered_face_vec, sha256_short = load_registered_template_for_student(active_slot_info["code"])
-                print(f"[SEAT-SWITCH] Da chuyen sang ghe: [{active_slot_info['seat']}] - {active_slot_info['name']}")
+                print(f"[SEAT-SWITCH] Da chuyen sang ghe: [{active_slot_info['seat']}] - {active_slot_info['name']} (2FA={is_checked_in})")
             elif key in [ord('r'), ord('R')]:
                 if last_clean_frame is not None and last_face_bbox is not None:
                     vec = compute_face_feature_vector(last_clean_frame, last_face_bbox)
@@ -1302,17 +1327,13 @@ def main():
                         checkin_start_time = time.time()
                         print(f"[FACE-2FA] Da luu vector & SHA256 ({sha256_short}) cho {active_slot_info['code']}!")
             elif key in [ord('t'), ord('T')]:
-                # Vá lỗi [P1] của Codex: Khi chuyển sang Góc Cao 2.2m, tuyệt đối KHÔNG tự động
-                # gửi check-in isLivenessVerified=True hộ cả lớp, mà chỉ đồng bộ danh sách ghế
-                # đã thực sự check-in từ Backend C#!
                 overhead_2_2m_mode = not overhead_2_2m_mode
+                is_checked_in = slot_states[active_seat_idx]["verified"]
+                checkin_start_time = None
                 if overhead_2_2m_mode:
-                    is_checked_in = True
                     sync_verified_seats_from_backend(slot_states)
                     print("[TIER-2 OVERHEAD] Da chuyen sang Che do Camera Goc Cao 2.2m (Fixed Seat ROI)!")
                 else:
-                    is_checked_in = slot_states[active_seat_idx]["verified"]
-                    checkin_start_time = None
                     print("[TIER-1 CLOSE-UP] Da chuyen ve Che do Camera Cu Ly Gan!")
             elif key in [ord('v'), ord('V')]:
                 if cap is not None:
