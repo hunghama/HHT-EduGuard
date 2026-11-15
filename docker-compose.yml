@@ -1,0 +1,50 @@
+﻿services:
+  eduguard-sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: eduguard-sqlserver
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD:-EduGuard@2026Strong!}
+      - MSSQL_PID=Express
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  eduguard-api:
+    build:
+      context: ./src/EduGuard.Backend
+      dockerfile: Dockerfile
+    container_name: eduguard-api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_DEMO_CHAT_ID=${TELEGRAM_DEMO_CHAT_ID:-}
+      - ConnectionStrings__DefaultConnection=Server=eduguard-sqlserver,1433;Database=HHT_EduGuard;User Id=sa;Password=${MSSQL_SA_PASSWORD:-EduGuard@2026Strong!};TrustServerCertificate=True;
+    ports:
+      - "5160:8080"
+    depends_on:
+      eduguard-sqlserver:
+        condition: service_healthy
+    restart: unless-stopped
+
+  eduguard-dashboard:
+    image: nginx:alpine
+    container_name: eduguard-dashboard
+    ports:
+      - "3000:80"
+    volumes:
+      - ./src/EduGuard.Dashboard:/usr/share/nginx/html:ro
+    depends_on:
+      - eduguard-api
+    restart: unless-stopped
+
+volumes:
+  sqlserver_data:
